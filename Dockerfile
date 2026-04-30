@@ -1,22 +1,40 @@
-ARG  CODE_VERSION=latest
+# Set the build mode (default to remote)
+ARG BUILD_MODE=remote
 FROM python:3.12.3-bookworm
 
-WORKDIR /cl-dashboard-cohorts
+ARG BUILD_MODE
+ENV BUILD_MODE=${BUILD_MODE}
 
+# Install required tools
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    software-properties-common \
     git \
+    python3-pip \
+    software-properties-common \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/curiouslearning/cl-dashboard-cohorts.git .
+# Set the workdir to a neutral temp folder first
+WORKDIR /tmp/build-context
 
-RUN pip3 install -r requirements.txt
+# Clone OR copy conditionally
+RUN if [ "$BUILD_MODE" = "remote" ]; then \
+      git clone https://github.com/curiouslearning/cl-dashboard-cohorts.git /cl-dashboard-cohorts ; \
+    fi
 
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
+# Copy only if local
+COPY . /tmp/local-copy
+RUN if [ "$BUILD_MODE" = "local" ]; then \
+      cp -r /tmp/local-copy /cl-dashboard-cohorts ; \
+    fi
 
-EXPOSE 8501
+WORKDIR /cl-dashboard-cohorts
 
-CMD ["./entrypoint.sh"]
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+ENV PORT=8501
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
