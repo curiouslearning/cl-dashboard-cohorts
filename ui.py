@@ -111,6 +111,25 @@ def inject_css() -> None:
           [data-testid="stSidebar"] {{
             background: {WARM_WHITE};
           }}
+
+          [data-testid="stSidebar"] .st-key-cohort_picker {{
+            background: {TEAL_LIGHT};
+            border: 1px solid {TEAL};
+            border-radius: 10px;
+            padding: 0.85rem 0.9rem 0.5rem 0.9rem;
+            margin-bottom: 0.5rem;
+          }}
+          [data-testid="stSidebar"] .st-key-cohort_picker label {{
+            color: {NAVY} !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.78rem !important;
+          }}
+          [data-testid="stSidebar"] .st-key-cohort_picker [data-baseweb="select"] > div {{
+            background: white;
+            border-color: {TEAL};
+          }}
         </style>
         """,
         unsafe_allow_html=True,

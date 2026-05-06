@@ -65,7 +65,14 @@ with st.sidebar:
     if not cohorts:
         st.error("No cohorts available.")
         st.stop()
-    cohort_name = st.selectbox("Select Cohort", cohorts)
+
+    qp_cohort = st.query_params.get("cohort")
+    default_index = cohorts.index(qp_cohort) if qp_cohort in cohorts else 0
+    cohort_name = st.selectbox(
+        "Select Cohort", cohorts, index=default_index, key="cohort_picker"
+    )
+    if st.query_params.get("cohort") != cohort_name:
+        st.query_params["cohort"] = cohort_name
 
 # ============================================================
 # Load data
