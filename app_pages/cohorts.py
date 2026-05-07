@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from settings import initialize
+from cohort_aliases import cohort_for_display, display_name
 from colors import FUNNEL_STEP_COLORS
 from data import load_all_cohorts, load_cohort_users
 from metrics import compute_funnel, compute_kpis
@@ -61,18 +62,24 @@ def learner_status(row, today: dt.date) -> str:
 with st.sidebar:
     st.markdown("### Curious Learning")
     st.markdown("---")
-    cohorts = load_all_cohorts()
+    cohorts = sorted(load_all_cohorts(), key=display_name)
     if not cohorts:
         st.error("No cohorts available.")
         st.stop()
 
     qp_cohort = st.query_params.get("cohort")
-    default_index = cohorts.index(qp_cohort) if qp_cohort in cohorts else 0
+    matched = cohort_for_display(qp_cohort, cohorts) if qp_cohort else None
+    default_index = cohorts.index(matched) if matched in cohorts else 0
     cohort_name = st.selectbox(
-        "Select Cohort", cohorts, index=default_index, key="cohort_picker"
+        "Select Cohort",
+        cohorts,
+        index=default_index,
+        format_func=display_name,
+        key="cohort_picker",
     )
-    if st.query_params.get("cohort") != cohort_name:
-        st.query_params["cohort"] = cohort_name
+    cohort_label = display_name(cohort_name)
+    if st.query_params.get("cohort") != cohort_label:
+        st.query_params["cohort"] = cohort_label
 
 # ============================================================
 # Load data
@@ -126,7 +133,7 @@ with st.sidebar:
 # Page header
 # ============================================================
 st.markdown(
-    f"## {cohort_name}"
+    f"## {cohort_label}"
     f"<span class='ct-cohort-badge'>{len(df):,} learners</span>",
     unsafe_allow_html=True,
 )
