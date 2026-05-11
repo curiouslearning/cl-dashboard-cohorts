@@ -251,8 +251,12 @@ Data refreshes daily.
 | Status | derived (see below) | string |
 
 > Note: `cr_user_progress` is granular by `(cr_user_id, app_language, country)`,
-> so the same learner can appear on multiple rows (one per language/country).
-> The current roster keeps each row separately — no dedupe.
+> so the same learner can appear on multiple rows. `load_cohort_users` dedupes
+> to one row per `cr_user_id`, keeping the row with the furthest progress:
+> any `level_completed` row wins, ranked by `max_user_level`; otherwise rank by
+> `furthest_event` ordinal (`download_completed` < `tapped_start` <
+> `selected_level` < `puzzle_completed` < `level_completed`). This matches the
+> dedupe behavior in the internal dashboard's `clean_cr_users_to_single_language`.
 
 > **Active Span ≠ days played.** It's the calendar span from a learner's first
 > recorded event to their last. A learner who plays heavily on a single day has

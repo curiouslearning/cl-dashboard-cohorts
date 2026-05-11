@@ -9,6 +9,41 @@ from google.cloud import bigquery
 from settings import get_gcp_credentials
 
 
+_FURTHEST_EVENT_ORDER = [
+    "download_completed",
+    "tapped_start",
+    "selected_level",
+    "puzzle_completed",
+    "level_completed",
+]
+_FURTHEST_EVENT_RANK = {e: r for r, e in enumerate(_FURTHEST_EVENT_ORDER)}
+
+
+def _pick_furthest_progress_row(df: pd.DataFrame) -> pd.DataFrame:
+    """Collapse multiple (language, country) rows per learner to one row,
+    keeping the row that represents the furthest progress.
+
+    A `level_completed` row always beats a non-`level_completed` row — the
+    `is_level_completed` key is what guards against a stray non-completed row
+    that happens to carry a non-zero `max_user_level`.
+    """
+    if df.empty:
+        return df
+    ranked = df.assign(
+        _is_level_completed=(df["furthest_event"] == "level_completed"),
+        _event_rank=df["furthest_event"].map(_FURTHEST_EVENT_RANK).fillna(-1),
+    )
+    ranked = ranked.sort_values(
+        ["cr_user_id", "_is_level_completed", "max_user_level", "_event_rank"],
+        ascending=[True, False, False, False],
+    )
+    return (
+        ranked.drop_duplicates(subset=["cr_user_id"], keep="first")
+        .drop(columns=["_is_level_completed", "_event_rank"])
+        .reset_index(drop=True)
+    )
+
+
 @st.cache_data(ttl="1d", show_spinner=False)
 def load_all_cohorts() -> list[str]:
     _, bq_client = get_gcp_credentials()
@@ -39,7 +74,8 @@ def load_cohort_users(cohort_name: str) -> pd.DataFrame:
           p.gpc,
           p.total_time_minutes,
           p.active_span,
-          p.days_to_ra
+          p.days_to_ra,
+          p.furthest_event
         FROM `dataexploration-193817.user_data.cr_user_progress` p
         JOIN `dataexploration-193817.user_data.cr_cohorts` c
           ON p.cr_user_id = c.cr_user_id
@@ -50,4 +86,5 @@ def load_cohort_users(cohort_name: str) -> pd.DataFrame:
             bigquery.ScalarQueryParameter("cohort_name", "STRING", cohort_name),
         ]
     )
-    return bq_client.query(sql, job_config=job_config).to_dataframe()
+    df = bq_client.query(sql, job_config=job_config).to_dataframe()
+    return _pick_furthest_progress_row(df)
