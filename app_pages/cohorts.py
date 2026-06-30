@@ -42,6 +42,9 @@ def fmt_num(v: float) -> str:
 
 
 def learner_status(row, today: dt.date) -> str:
+    # No FTM event at all → distributed but never interacted (FTMI == 0).
+    if row["lr_flag"] != 1:
+        return "Not opened"
     last = row["last_event_date"]
     if pd.notna(last):
         days_since = (today - pd.Timestamp(last).date()).days
@@ -102,11 +105,21 @@ with st.sidebar:
             f"""
             **Funnel steps**
 
-            - **LR** — Learner Reached
+            - **LR** — Learner Reached (opened Curious Reader while online
+              at some point during their play span, registering an app-launch)
+            - **FTMI** — FTM Interacted (Feed the Monster actually loaded
+              and produced gameplay events)
             - **PC** — Puzzle Completed
             - **LA** — Learner Acquired (reached level 1)
             - **RA** — Reader Acquired (reached level 25)
             - **GC** — Game Completed
+
+            A learner has to **open Curious Reader while online** to register
+            an app-launch (LR) — receiving the app isn't enough. Feed the
+            Monster then has to load and run to count as **FTMI**; if a
+            learner's first session is offline it can fail to initialise, so
+            the **LR → FTMI** drop shows how many opened the app but never
+            got into gameplay.
 
             **Active Span** is the number of days between a learner's
             first and last recorded event — *not* a count of days played.
@@ -118,7 +131,9 @@ with st.sidebar:
             - **Reader ✓** — reached level 25
             - **Learner** — reached level 1
             - **Exploring** — completed a puzzle but not yet level 1
-            - **Just started** — no milestone reached yet
+            - **Just started** — opened the app but no milestone yet
+            - **Not opened** — in the cohort but never interacted with
+              Feed the Monster
             - **Stalled** — no activity in the last {STALE_DAYS} days,
               regardless of milestone
 

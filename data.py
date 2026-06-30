@@ -59,26 +59,34 @@ def load_all_cohorts() -> list[str]:
 @st.cache_data(ttl="1d", show_spinner="Loading cohort…")
 def load_cohort_users(cohort_name: str) -> pd.DataFrame:
     _, bq_client = get_gcp_credentials()
+    # LEFT JOIN from the cohort table: every distributed learner is "reached"
+    # (LR) by virtue of cohort membership — standalone builds ship with Feed the
+    # Monster pre-loaded and emit no `app_launch` event, so there is no launch
+    # signal to join on. Learners who never produced an FTM event have no
+    # `cr_user_progress` row; we keep them (flags coalesced to 0) and let
+    # `lr_flag` carry the "FTM Interacted" (FTMI) step instead. Numeric progress
+    # fields stay NULL for non-players so averages skip them rather than count
+    # them as zero.
     sql = """
         SELECT
-          p.cr_user_id,
+          c.cr_user_id,
           p.app_language,
           p.country,
           p.max_user_level,
           p.last_event_date,
-          p.lr_flag,
-          p.pc_flag,
-          p.la_flag,
-          p.ra_flag,
-          p.gc_flag,
+          COALESCE(p.lr_flag, 0) AS lr_flag,
+          COALESCE(p.pc_flag, 0) AS pc_flag,
+          COALESCE(p.la_flag, 0) AS la_flag,
+          COALESCE(p.ra_flag, 0) AS ra_flag,
+          COALESCE(p.gc_flag, 0) AS gc_flag,
           p.gpc,
           p.total_time_minutes,
           p.active_span,
           p.days_to_ra,
           p.furthest_event
-        FROM `dataexploration-193817.user_data.cr_user_progress` p
-        JOIN `dataexploration-193817.user_data.cr_cohorts` c
-          ON p.cr_user_id = c.cr_user_id
+        FROM `dataexploration-193817.user_data.cr_cohorts` c
+        LEFT JOIN `dataexploration-193817.user_data.cr_user_progress` p
+          ON c.cr_user_id = p.cr_user_id
         WHERE c.cohort_name = @cohort_name
     """
     job_config = bigquery.QueryJobConfig(
