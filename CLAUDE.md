@@ -53,8 +53,10 @@ font                    = "sans serif"
 ```
 
 ### Funnel step tile colors (LR → GC, lightest → darkest)
+One shade per funnel step: LR · FTMI · PC · LA · RA · GC.
 ```python
 FUNNEL_STEP_COLORS = [
+    "#DCEBF7",
     "#C5DFF0",
     "#9ECFE0",
     "#77BFD0",
@@ -138,25 +140,32 @@ ORDER BY cohort_name
 ```
 
 ### `load_cohort_users(cohort_name: str) → pd.DataFrame`
+**LEFT JOIN from `cr_cohorts`** so every distributed/reached learner appears —
+including cohort members with no `cr_user_progress` row (e.g. learners who opened
+the app but, due to the offline Firebase-init bug, never produced FTM gameplay).
+Flags are coalesced to 0; numeric progress fields stay NULL so averages skip
+non-players. The 53→0 difference between cohort size and gameplay rows is exactly
+the **LR → FTMI** drop the funnel surfaces.
 ```sql
 SELECT
-  p.cr_user_id,
+  c.cr_user_id,
   p.app_language,
   p.country,
   p.max_user_level,
   p.last_event_date,
-  p.lr_flag,
-  p.pc_flag,
-  p.la_flag,
-  p.ra_flag,
-  p.gc_flag,
+  COALESCE(p.lr_flag, 0) AS lr_flag,
+  COALESCE(p.pc_flag, 0) AS pc_flag,
+  COALESCE(p.la_flag, 0) AS la_flag,
+  COALESCE(p.ra_flag, 0) AS ra_flag,
+  COALESCE(p.gc_flag, 0) AS gc_flag,
   p.gpc,
   p.total_time_minutes,
   p.active_span,
-  p.days_to_ra
-FROM `dataexploration-193817.user_data.cr_user_progress` p
-JOIN `dataexploration-193817.user_data.cr_cohorts` c
-  ON p.cr_user_id = c.cr_user_id
+  p.days_to_ra,
+  p.furthest_event
+FROM `dataexploration-193817.user_data.cr_cohorts` c
+LEFT JOIN `dataexploration-193817.user_data.cr_user_progress` p
+  ON c.cr_user_id = p.cr_user_id
 WHERE c.cohort_name = @cohort_name
 ```
 
@@ -175,17 +184,26 @@ df = bq_client.query(sql, job_config=job_config).to_dataframe()
 
 ```python
 FUNNEL_STEPS = [
-    {"abbrev": "LR", "label": "Learner Reached",  "col": "lr_flag"},
-    {"abbrev": "PC", "label": "Puzzle Completed", "col": "pc_flag"},
-    {"abbrev": "LA", "label": "Learner Acquired", "col": "la_flag"},
-    {"abbrev": "RA", "label": "Reader Acquired",  "col": "ra_flag"},
-    {"abbrev": "GC", "label": "Game Completed",   "col": "gc_flag"},
+    {"abbrev": "LR",   "label": "Learner Reached",  "col": None},      # whole cohort
+    {"abbrev": "FTMI", "label": "FTM Interacted",   "col": "lr_flag"}, # produced a gameplay event
+    {"abbrev": "PC",   "label": "Puzzle Completed", "col": "pc_flag"},
+    {"abbrev": "LA",   "label": "Learner Acquired", "col": "la_flag"},
+    {"abbrev": "RA",   "label": "Reader Acquired",  "col": "ra_flag"},
+    {"abbrev": "GC",   "label": "Game Completed",   "col": "gc_flag"},
 ]
 ```
 
+**LR vs FTMI.** `LR` is sourced from cohort membership, not a flag (`col=None`) —
+every distributed learner is "reached." `FTMI` ("FTM Interacted") is the standalone
+analog of the Playstore funnel's `app_launch` step: it counts learners who produced
+at least one FTM event, which `lr_flag` encodes (it is `1` for every learner with a
+`cr_user_progress` row, `0`/NULL otherwise). The `LR → FTMI` drop = learners who
+opened the app but whose Feed the Monster never ran (offline-init bug). Do **not**
+use `lr_flag` for LR — it only means "has a gameplay row," not "reached."
+
 ### `compute_funnel(df) → list[dict]`
 For each step, adds:
-- `count` — number of users where flag == 1
+- `count` — `total_users` when `col is None` (LR), else number of users where flag == 1
 - `pct_of_total` — count / total_users
 
 ### `compute_kpis(df) → dict`
@@ -227,7 +245,7 @@ Data refreshes daily.
 [KPI tiles row]
   Total Learners | % Learner Acquired | % Reader Acquired | Avg Level
 
-[Funnel tiles row: LR  PC  LA  RA  GC]
+[Funnel tiles row: LR  FTMI  PC  LA  RA  GC]
 
 [Funnel drop-off area chart]
 
@@ -274,6 +292,8 @@ Data refreshes daily.
 STALE_DAYS = 7
 
 def learner_status(row, today):
+    # No FTM event at all → reached but never interacted (FTMI == 0).
+    if row["lr_flag"] != 1:  return "Not opened"
     last = row["last_event_date"]
     if pd.notna(last):
         days_since = (today - pd.Timestamp(last).date()).days
@@ -284,6 +304,9 @@ def learner_status(row, today):
     if row["pc_flag"] == 1:  return "Exploring"
     return                          "Just started"
 ```
+
+The **"Not opened"** status (FTMI == 0) covers cohort members with no gameplay
+row — distributed/reached but the game never ran for them.
 
 The 7-day staleness check overrides the milestone label — a learner who reached
 level 1 a month ago and hasn't returned reads as **Stalled**, not **Learner**.
