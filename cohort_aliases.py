@@ -22,6 +22,10 @@ COHORT_ALIAS: dict[str, str] = {
     "program:Congo - Brazzaville":                     "CongoBrazzaville",
     "program:Durban Cohort":                           "DurbanCohort",
     "program:WBS - Nigeria":                           "WBSNigeria",
+    "study:World Bank Nigeria June 2026":              "WBStudy",
+    "study:World Bank Nigeria June 2026 - In-person":  "WBStudyInPerson",
+    "study:World Bank Nigeria June 2026 - Online":     "WBStudyOnline",
+    "study:World Bank Nigeria June 2026 - Phone":      "WBStudyPhone",
 }
 
 
